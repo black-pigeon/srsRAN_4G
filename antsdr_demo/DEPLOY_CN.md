@@ -2,17 +2,23 @@
 
 本文档描述当前已经在本机验证过的 E200/eNB + E316/UE 空口 LTE 实验环境。EPC、eNB 和 UE 都运行在同一台 Linux 上，两个 SDR 通过独立千兆网卡传输 IQ，RF 连接使用屏蔽箱内天线或合规的衰减器/耦合器。
 
+下面的命令均按当前已验证主机的绝对路径编写：srsRAN 目录为
+`/home/wcc/mp_demo/SDR-APP/srsRAN_4G`，ANTSDR UHD 源码目录为
+`/home/wcc/wcc_demo/tmp/antsdr_uhd`，可以直接复制执行。
+
 ## 1. 已验证的软件、固件和硬件版本
 
 | 项目 | 当前版本或值 |
 |---|---|
-| srsRAN 4G | `release_25_10`，commit `6bcbd9e5bf8686aa7085202cd847c5ddd64a9c16` |
+| srsRAN 4G | `black-pigeon/srsRAN_4G` 的 `release_25_10` 分支（验证基线 commit `6bcbd9e5bf8686aa7085202cd847c5ddd64a9c16`） |
+| srsRAN 源码目录 | `/home/wcc/mp_demo/SDR-APP/srsRAN_4G` |
 | ANTSDR UHD 源码 | MicroPhase `antsdr_uhd`，commit `b5ebd04a5f405ac3102a772e5d1e8f1be21a7dc3` |
+| UHD 源码目录 | `/home/wcc/wcc_demo/tmp/antsdr_uhd` |
 | 本地 UHD 安装 | `/opt/antsdr-uhd`，`UHD 4.1.0.0-0-45cabfde` |
 | srsRAN 本地安装 | `/home/wcc/.local/srsran-antsdr` |
 | srsRAN 本地构建目录 | `/home/wcc/mp_demo/SDR-APP/srsRAN_4G/build-antsdr-local` |
-| E200 固件包 | `antsdr_demo/firmware/build_sdimg_e200.zip` |
-| E316 固件包 | `antsdr_demo/firmware/build_sdimg_e316.zip` |
+| E200 固件包 | `/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/firmware/build_sdimg_e200.zip` |
+| E316 固件包 | `/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/firmware/build_sdimg_e316.zip` |
 | 固件构建提交 | U-Boot 字符串为 `b5ebd04a5f405ac3102a772e5d1e8f1be21a7dc3` |
 | FPGA bitstream | E200 `antsdr_e200`；E316 `antsdr_e310v2`；Vivado `2019.1` |
 | 设备报告 | FPGA version `16.0`，firmware delivery `2024` |
@@ -23,11 +29,11 @@
 
 ```bash
 /opt/antsdr-uhd/bin/uhd_config_info --version
-source antsdr_demo/env.sh
-ldd build-antsdr-local/srsue/src/srsue | grep -E 'libuhd|libusb'
+source /home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/env.sh
+ldd /home/wcc/mp_demo/SDR-APP/srsRAN_4G/build-antsdr-local/srsue/src/srsue | grep -E 'libuhd|libusb'
 ```
 
-输出应来自 `/opt/antsdr-uhd`，不能切换到系统 UHD 4.9。`antsdr_demo/env.sh` 设置了 `PATH`、`LD_LIBRARY_PATH` 和 `UHD_IMAGES_DIR`；三个启动脚本会通过 `sudo -E` 传递这些变量。
+输出应来自 `/opt/antsdr-uhd`，不能切换到系统 UHD 4.9。`/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/env.sh` 设置了 `PATH`、`LD_LIBRARY_PATH` 和 `UHD_IMAGES_DIR`；三个启动脚本会通过 `sudo -E` 传递这些变量。
 
 ## 2. 硬件拓扑和地址
 
@@ -43,9 +49,8 @@ ldd build-antsdr-local/srsue/src/srsue | grep -E 'libuhd|libusb'
 UHD 主机驱动和固件均来自 MicroPhase 项目：
 
 ```bash
-git clone https://github.com/MicroPhase/antsdr_uhd.git
-cd antsdr_uhd
-git checkout b5ebd04a5f405ac3102a772e5d1e8f1be21a7dc3
+test -d /home/wcc/wcc_demo/tmp/antsdr_uhd/.git || git clone https://github.com/MicroPhase/antsdr_uhd.git /home/wcc/wcc_demo/tmp/antsdr_uhd
+git -C /home/wcc/wcc_demo/tmp/antsdr_uhd checkout b5ebd04a5f405ac3102a772e5d1e8f1be21a7dc3
 ```
 
 先编译到独立目录 `/opt/antsdr-uhd`，不要覆盖系统 UHD：
@@ -58,8 +63,8 @@ sudo apt-get install -y autoconf automake build-essential ccache cmake \
   python3-dev python3-mako python3-numpy python3-requests python3-scipy \
   python3-setuptools python3-ruamel.yaml
 
-cd host
-cmake -S . -B build-antsdr \
+cd /home/wcc/wcc_demo/tmp/antsdr_uhd/host
+cmake -S /home/wcc/wcc_demo/tmp/antsdr_uhd/host -B /home/wcc/wcc_demo/tmp/antsdr_uhd/host/build-antsdr \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/opt/antsdr-uhd \
   -DENABLE_ANT=ON -DENABLE_USB=ON \
@@ -68,8 +73,8 @@ cmake -S . -B build-antsdr \
   -DENABLE_E320=OFF -DENABLE_E300=OFF -DENABLE_B200=OFF \
   -DENABLE_B100=OFF -DENABLE_OCTOCLOCK=OFF \
   -DENABLE_PYTHON_API=ON -DENABLE_TESTS=OFF
-cmake --build build-antsdr --parallel
-sudo cmake --install build-antsdr
+cmake --build /home/wcc/wcc_demo/tmp/antsdr_uhd/host/build-antsdr --parallel
+sudo cmake --install /home/wcc/wcc_demo/tmp/antsdr_uhd/host/build-antsdr
 ```
 
 ANT 组件目前构建时仍需要 `ENABLE_USB=ON`。安装后检查：
@@ -79,8 +84,8 @@ export PATH=/opt/antsdr-uhd/bin:$PATH
 export LD_LIBRARY_PATH=/opt/antsdr-uhd/lib:${LD_LIBRARY_PATH:-}
 export UHD_IMAGES_DIR=/opt/antsdr-uhd/share/uhd/images
 /opt/antsdr-uhd/bin/uhd_config_info --version
-uhd_find_devices --args="addr=192.168.1.10"
-uhd_usrp_probe --args="addr=192.168.1.10,product=E200"
+/opt/antsdr-uhd/bin/uhd_find_devices --args="addr=192.168.1.10"
+/opt/antsdr-uhd/bin/uhd_usrp_probe --args="addr=192.168.1.10,product=E200"
 ```
 
 若要从源码重新生成 SD 固件，需要安装 Xilinx Vivado/SDK 2019.1，默认路径为
@@ -92,13 +97,12 @@ sudo apt-get install -y git build-essential fakeroot ccache bc bison flex \
   device-tree-compiler u-boot-tools
 source /opt/Xilinx/Vivado/2019.1/settings64.sh
 source /opt/Xilinx/SDK/2019.1/settings64.sh
-cd ../firmware
-scripts/build_image.sh e200
-scripts/build_image.sh e310v2
+cd /home/wcc/wcc_demo/tmp/antsdr_uhd/firmware
+/home/wcc/wcc_demo/tmp/antsdr_uhd/firmware/scripts/build_image.sh e200
+/home/wcc/wcc_demo/tmp/antsdr_uhd/firmware/scripts/build_image.sh e310v2
 ```
 
-使用 `--rebuild-fpga` 可强制重新生成 FPGA 工程。没有 Vivado 时，直接使用本项目
-本项目 `antsdr_demo/firmware/` 目录中已经生成的两个 zip 镜像。
+使用 `--rebuild-fpga` 可强制重新生成 FPGA 工程。没有 Vivado 时，直接使用本项目 `/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/firmware/` 目录中已经生成的两个 zip 镜像。
 
 ## 4. 固件准备
 
@@ -106,17 +110,16 @@ scripts/build_image.sh e310v2
 
 ```bash
 mkdir -p /tmp/antsdr-e200 /tmp/antsdr-e316
-cd /path/to/srsRAN_4G
-unzip antsdr_demo/firmware/build_sdimg_e200.zip -d /tmp/antsdr-e200
-unzip antsdr_demo/firmware/build_sdimg_e316.zip -d /tmp/antsdr-e316
+unzip /home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/firmware/build_sdimg_e200.zip -d /tmp/antsdr-e200
+unzip /home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/firmware/build_sdimg_e316.zip -d /tmp/antsdr-e316
 ```
 
-将对应 `build_sdimg/` 中的六个文件复制到对应设备的 FAT32 SD 卡根目录，关机插卡后启动设备。刷写后检查：
+将对应 `/home/wcc/wcc_demo/tmp/antsdr_uhd/firmware/build_sdimg/` 中的六个文件复制到对应设备的 FAT32 SD 卡根目录，关机插卡后启动设备。刷写后检查：
 
 ```bash
-source antsdr_demo/env.sh
-uhd_usrp_probe --args 'type=ant,addr=192.168.1.10'
-uhd_usrp_probe --args 'type=ant,addr=192.168.10.122'
+source /home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/env.sh
+/opt/antsdr-uhd/bin/uhd_usrp_probe --args 'type=ant,addr=192.168.1.10'
+/opt/antsdr-uhd/bin/uhd_usrp_probe --args 'type=ant,addr=192.168.10.122'
 ```
 
 应看到 FPGA version `16.0`。固件升级后先单独确认两块板可 ping，再启动 srsRAN。
@@ -144,9 +147,10 @@ sudo apt-get install -y build-essential cmake ninja-build \
 如果尚未取得源码：
 
 ```bash
-git clone https://github.com/black-pigeon/srsRAN_4G.git
-cd srsRAN_4G
-git checkout release_25_10
+test -d /home/wcc/mp_demo/SDR-APP/srsRAN_4G/.git || git clone --branch release_25_10 --single-branch https://github.com/black-pigeon/srsRAN_4G.git /home/wcc/mp_demo/SDR-APP/srsRAN_4G
+git -C /home/wcc/mp_demo/SDR-APP/srsRAN_4G remote set-url origin https://github.com/black-pigeon/srsRAN_4G.git
+git -C /home/wcc/mp_demo/SDR-APP/srsRAN_4G fetch origin release_25_10
+git -C /home/wcc/mp_demo/SDR-APP/srsRAN_4G checkout release_25_10
 ```
 
 当前工程已经使用 ANTSDR UHD 编译完成；重新编译时必须设置 `UHD_DIR`，否则项目的
@@ -154,16 +158,16 @@ git checkout release_25_10
 
 ```bash
 cd /home/wcc/mp_demo/SDR-APP/srsRAN_4G
-source antsdr_demo/env.sh
+source /home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/env.sh
 export UHD_DIR=/opt/antsdr-uhd
-cmake -S . -B build-antsdr-local \
+cmake -S /home/wcc/mp_demo/SDR-APP/srsRAN_4G -B /home/wcc/mp_demo/SDR-APP/srsRAN_4G/build-antsdr-local \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/home/wcc/.local/srsran-antsdr \
   -DENABLE_UHD=ON -DENABLE_GUI=OFF \
   -DENABLE_BLADERF=OFF -DENABLE_SOAPYSDR=OFF \
   -DENABLE_ZEROMQ=ON
-cmake --build build-antsdr-local -j"$(nproc)"
-cmake --install build-antsdr-local
+cmake --build /home/wcc/mp_demo/SDR-APP/srsRAN_4G/build-antsdr-local -j"$(nproc)"
+cmake --install /home/wcc/mp_demo/SDR-APP/srsRAN_4G/build-antsdr-local
 ```
 
 如果 CMake 缓存过系统 UHD，应删除构建目录后重新配置。启动 banner 必须显示 `UHD_4.1.0.0-0-45cabfde`。
@@ -174,21 +178,21 @@ EPC 在本机运行，S1/核心网地址是 `127.0.1.100`，SPGW 用户面网关
 
 ```bash
 cd /home/wcc/mp_demo/SDR-APP/srsRAN_4G
-antsdr_demo/run_epc.sh
+/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/run_epc.sh
 ```
 
 第二个终端启动 eNB，E200 固定作为 eNB：
 
 ```bash
 cd /home/wcc/mp_demo/SDR-APP/srsRAN_4G
-antsdr_demo/run_enb.sh --profile 25prb
+/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/run_enb.sh --profile 25prb
 ```
 
 第三个终端启动 UE，E316 固定作为 UE：
 
 ```bash
 cd /home/wcc/mp_demo/SDR-APP/srsRAN_4G
-antsdr_demo/run_ue.sh --profile 25prb
+/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/run_ue.sh --profile 25prb
 ```
 
 UE 看到 `Network attach successful. IP: 172.16.0.x` 后，从 UE 的 network namespace 测试用户面：
@@ -212,8 +216,8 @@ sudo ip netns exec ue1 ping -c 10 -i 0.3 -W 2 172.16.0.1
 切换时只停止 UE 和 eNB，EPC 可以保持运行：
 
 ```bash
-antsdr_demo/run_enb.sh --profile 15prb
-antsdr_demo/run_ue.sh --profile 15prb
+/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/run_enb.sh --profile 15prb
+/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/run_ue.sh --profile 15prb
 ```
 
 50 PRB（11.52 MSPS）在当前主机上曾用 23.04 MHz 和 46.08 MHz 主时钟尝试，UE 未进入小区搜索成功状态，因此目前不作为交付档位。高采样率需要继续检查 CPU 实时性、UHD 缓冲和以太网传输；不能仅靠修改 `time_adv_nsamples` 解决。

@@ -10,7 +10,7 @@
 | E200 eNB | SDR `192.168.1.10`，PC 网卡 `eth2` |
 | E316 UE | SDR `192.168.10.122`，PC 网卡 `eth0` |
 | LTE | Band 7，EARFCN 2900，DL `2635 MHz`，UL `2515 MHz` |
-| srsRAN | `release_25_10`，commit `6bcbd9e5b` |
+| srsRAN | `black-pigeon/srsRAN_4G` 的 `release_25_10` 分支，验证基线 commit `6bcbd9e5b` |
 | UHD | `/opt/antsdr-uhd`，`UHD_4.1.0.0-0-45cabfde` |
 | UHD 源码 | MicroPhase `antsdr_uhd`，commit `b5ebd04a5f405ac3102a772e5d1e8f1be21a7dc3` |
 | 固件 | `firmware/build_sdimg_e200.zip` 和 `firmware/build_sdimg_e316.zip` |

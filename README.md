@@ -4,6 +4,10 @@ This is the customer-facing deployment guide for the validated ANTSDR setup.
 中文完整部署文档见 [antsdr_demo/DEPLOY_CN.md](antsdr_demo/DEPLOY_CN.md)；英文简要入口见
 [antsdr_demo/README_EN.md](antsdr_demo/README_EN.md)。
 
+The commands below use the absolute paths from this validated host:
+`/home/wcc/mp_demo/SDR-APP/srsRAN_4G` for srsRAN and
+`/home/wcc/wcc_demo/tmp/antsdr_uhd` for the ANTSDR UHD source.
+
 This document describes the validated E200/eNB and E316/UE LTE setup. EPC,
 eNB, and UE run on one Linux host. The two SDRs use separate gigabit Ethernet
 links for IQ transport; the RF path is provided by antennas in a screened
@@ -13,13 +17,15 @@ chamber or by two attenuated RF paths.
 
 | Item | Version or value |
 |---|---|
-| srsRAN 4G | `release_25_10`, commit `6bcbd9e5bf8686aa7085202cd847c5ddd64a9c16` |
+| srsRAN 4G | `black-pigeon/srsRAN_4G` branch `release_25_10` (validated base commit `6bcbd9e5bf8686aa7085202cd847c5ddd64a9c16`) |
+| srsRAN checkout | `/home/wcc/mp_demo/SDR-APP/srsRAN_4G` |
 | ANTSDR UHD source | MicroPhase `antsdr_uhd`, commit `b5ebd04a5f405ac3102a772e5d1e8f1be21a7dc3` |
+| UHD source checkout | `/home/wcc/wcc_demo/tmp/antsdr_uhd` |
 | Private UHD installation | `/opt/antsdr-uhd`, `UHD 4.1.0.0-0-45cabfde` |
 | Local srsRAN install | `/home/wcc/.local/srsran-antsdr` |
 | Local build directory | `/home/wcc/mp_demo/SDR-APP/srsRAN_4G/build-antsdr-local` |
-| E200 image | `antsdr_demo/firmware/build_sdimg_e200.zip` |
-| E316 image | `antsdr_demo/firmware/build_sdimg_e316.zip` |
+| E200 image | `/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/firmware/build_sdimg_e200.zip` |
+| E316 image | `/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/firmware/build_sdimg_e316.zip` |
 | Firmware build commit | U-Boot contains `b5ebd04a5f405ac3102a772e5d1e8f1be21a7dc3` |
 | FPGA bitstream | E200 `antsdr_e200`; E316 `antsdr_e310v2`; Vivado `2019.1` |
 | Device report | FPGA version `16.0`, firmware delivery `2024` |
@@ -33,8 +39,8 @@ Verify the private UHD before starting the stack:
 
 ```bash
 /opt/antsdr-uhd/bin/uhd_config_info --version
-source antsdr_demo/env.sh
-ldd build-antsdr-local/srsue/src/srsue | grep -E 'libuhd|libusb'
+source /home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/env.sh
+ldd /home/wcc/mp_demo/SDR-APP/srsRAN_4G/build-antsdr-local/srsue/src/srsue | grep -E 'libuhd|libusb'
 ```
 
 The output must resolve UHD from `/opt/antsdr-uhd`, leaving any system UHD 4.9
@@ -58,9 +64,8 @@ TX directly to RX.
 The host driver and firmware come from the MicroPhase repository:
 
 ```bash
-git clone https://github.com/MicroPhase/antsdr_uhd.git
-cd antsdr_uhd
-git checkout b5ebd04a5f405ac3102a772e5d1e8f1be21a7dc3
+test -d /home/wcc/wcc_demo/tmp/antsdr_uhd/.git || git clone https://github.com/MicroPhase/antsdr_uhd.git /home/wcc/wcc_demo/tmp/antsdr_uhd
+git -C /home/wcc/wcc_demo/tmp/antsdr_uhd checkout b5ebd04a5f405ac3102a772e5d1e8f1be21a7dc3
 ```
 
 Build the private host UHD without replacing a system UHD installation:
@@ -73,8 +78,8 @@ sudo apt-get install -y autoconf automake build-essential ccache cmake \
   python3-dev python3-mako python3-numpy python3-requests python3-scipy \
   python3-setuptools python3-ruamel.yaml
 
-cd host
-cmake -S . -B build-antsdr \
+cd /home/wcc/wcc_demo/tmp/antsdr_uhd/host
+cmake -S /home/wcc/wcc_demo/tmp/antsdr_uhd/host -B /home/wcc/wcc_demo/tmp/antsdr_uhd/host/build-antsdr \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/opt/antsdr-uhd \
   -DENABLE_ANT=ON -DENABLE_USB=ON \
@@ -83,8 +88,8 @@ cmake -S . -B build-antsdr \
   -DENABLE_E320=OFF -DENABLE_E300=OFF -DENABLE_B200=OFF \
   -DENABLE_B100=OFF -DENABLE_OCTOCLOCK=OFF \
   -DENABLE_PYTHON_API=ON -DENABLE_TESTS=OFF
-cmake --build build-antsdr --parallel
-sudo cmake --install build-antsdr
+cmake --build /home/wcc/wcc_demo/tmp/antsdr_uhd/host/build-antsdr --parallel
+sudo cmake --install /home/wcc/wcc_demo/tmp/antsdr_uhd/host/build-antsdr
 ```
 
 The ANT component currently requires `ENABLE_USB=ON` at build time even though
@@ -96,8 +101,8 @@ export PATH=/opt/antsdr-uhd/bin:$PATH
 export LD_LIBRARY_PATH=/opt/antsdr-uhd/lib:${LD_LIBRARY_PATH:-}
 export UHD_IMAGES_DIR=/opt/antsdr-uhd/share/uhd/images
 /opt/antsdr-uhd/bin/uhd_config_info --version
-uhd_find_devices --args="addr=192.168.1.10"
-uhd_usrp_probe --args="addr=192.168.1.10,product=E200"
+/opt/antsdr-uhd/bin/uhd_find_devices --args="addr=192.168.1.10"
+/opt/antsdr-uhd/bin/uhd_usrp_probe --args="addr=192.168.1.10,product=E200"
 ```
 
 To rebuild the SD images from source, install Vivado/SDK 2019.1 and source
@@ -111,15 +116,15 @@ sudo apt-get install -y git build-essential fakeroot ccache bc bison flex \
 
 source /opt/Xilinx/Vivado/2019.1/settings64.sh
 source /opt/Xilinx/SDK/2019.1/settings64.sh
-cd ../firmware
-scripts/build_image.sh e200
-scripts/build_image.sh e310v2
+cd /home/wcc/wcc_demo/tmp/antsdr_uhd/firmware
+/home/wcc/wcc_demo/tmp/antsdr_uhd/firmware/scripts/build_image.sh e200
+/home/wcc/wcc_demo/tmp/antsdr_uhd/firmware/scripts/build_image.sh e310v2
 ```
 
 Use `--rebuild-fpga` when the tracked FPGA sources must be regenerated. The
-resulting `build_sdimg/` contains `BOOT.bin`, `antsdr.bit`, `uImage`,
+resulting `/home/wcc/wcc_demo/tmp/antsdr_uhd/firmware/build_sdimg/` contains `BOOT.bin`, `antsdr.bit`, `uImage`,
 `uEnv.txt`, `devicetree.dtb`, and `uramdisk.image.gz`. If Vivado is not
-available, use the supplied images in `antsdr_demo/firmware/` instead.
+available, use the supplied images in `/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/firmware/` instead.
 
 ## 4. Loading the firmware
 
@@ -127,17 +132,17 @@ Unpack the appropriate image:
 
 ```bash
 mkdir -p /tmp/antsdr-e200 /tmp/antsdr-e316
-unzip antsdr_demo/firmware/build_sdimg_e200.zip -d /tmp/antsdr-e200
-unzip antsdr_demo/firmware/build_sdimg_e316.zip -d /tmp/antsdr-e316
+unzip /home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/firmware/build_sdimg_e200.zip -d /tmp/antsdr-e200
+unzip /home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/firmware/build_sdimg_e316.zip -d /tmp/antsdr-e316
 ```
 
-Copy the six files under `build_sdimg/` to the root of the matching FAT32 SD
+Copy the six files under `/home/wcc/wcc_demo/tmp/antsdr_uhd/firmware/build_sdimg/` to the root of the matching FAT32 SD
 card, power the unit off, insert the card, and boot it. Then probe each radio:
 
 ```bash
-source antsdr_demo/env.sh
-uhd_usrp_probe --args 'type=ant,addr=192.168.1.10'
-uhd_usrp_probe --args 'type=ant,addr=192.168.10.122'
+source /home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/env.sh
+/opt/antsdr-uhd/bin/uhd_usrp_probe --args 'type=ant,addr=192.168.1.10'
+/opt/antsdr-uhd/bin/uhd_usrp_probe --args 'type=ant,addr=192.168.10.122'
 ```
 
 Both devices should report FPGA version `16.0`. Verify Ethernet reachability
@@ -167,9 +172,10 @@ sudo apt-get install -y build-essential cmake ninja-build \
 Download the matching srsRAN source if it is not already available:
 
 ```bash
-git clone https://github.com/black-pigeon/srsRAN_4G.git
-cd srsRAN_4G
-git checkout release_25_10
+test -d /home/wcc/mp_demo/SDR-APP/srsRAN_4G/.git || git clone --branch release_25_10 --single-branch https://github.com/black-pigeon/srsRAN_4G.git /home/wcc/mp_demo/SDR-APP/srsRAN_4G
+git -C /home/wcc/mp_demo/SDR-APP/srsRAN_4G remote set-url origin https://github.com/black-pigeon/srsRAN_4G.git
+git -C /home/wcc/mp_demo/SDR-APP/srsRAN_4G fetch origin release_25_10
+git -C /home/wcc/mp_demo/SDR-APP/srsRAN_4G checkout release_25_10
 ```
 
 Configure CMake with `UHD_DIR`; this project’s `FindUHD.cmake` reads that
@@ -177,16 +183,16 @@ environment variable and otherwise may select a system UHD:
 
 ```bash
 cd /home/wcc/mp_demo/SDR-APP/srsRAN_4G
-source antsdr_demo/env.sh
+source /home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/env.sh
 export UHD_DIR=/opt/antsdr-uhd
-cmake -S . -B build-antsdr-local \
+cmake -S /home/wcc/mp_demo/SDR-APP/srsRAN_4G -B /home/wcc/mp_demo/SDR-APP/srsRAN_4G/build-antsdr-local \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/home/wcc/.local/srsran-antsdr \
   -DENABLE_UHD=ON -DENABLE_GUI=OFF \
   -DENABLE_BLADERF=OFF -DENABLE_SOAPYSDR=OFF \
   -DENABLE_ZEROMQ=ON
-cmake --build build-antsdr-local -j"$(nproc)"
-cmake --install build-antsdr-local
+cmake --build /home/wcc/mp_demo/SDR-APP/srsRAN_4G/build-antsdr-local -j"$(nproc)"
+cmake --install /home/wcc/mp_demo/SDR-APP/srsRAN_4G/build-antsdr-local
 ```
 
 If the CMake cache previously selected system UHD, remove the build directory
@@ -200,19 +206,19 @@ The EPC runs on the host. S1 uses `127.0.1.100`, and the SPGW gateway is
 
 ```bash
 cd /home/wcc/mp_demo/SDR-APP/srsRAN_4G
-antsdr_demo/run_epc.sh
+/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/run_epc.sh
 ```
 
 E200 is always the eNB in this setup:
 
 ```bash
-antsdr_demo/run_enb.sh --profile 25prb
+/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/run_enb.sh --profile 25prb
 ```
 
 E316 is always the UE:
 
 ```bash
-antsdr_demo/run_ue.sh --profile 25prb
+/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/run_ue.sh --profile 25prb
 ```
 
 After `Network attach successful. IP: 172.16.0.x`, test the data plane from
@@ -238,8 +244,8 @@ take the local SGI route and does not prove that packets crossed the LTE link.
 Stop UE and eNB before switching profiles; EPC can remain running:
 
 ```bash
-antsdr_demo/run_enb.sh --profile 15prb
-antsdr_demo/run_ue.sh --profile 15prb
+/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/run_enb.sh --profile 15prb
+/home/wcc/mp_demo/SDR-APP/srsRAN_4G/antsdr_demo/run_ue.sh --profile 15prb
 ```
 
 A first 50-PRB attempt at 11.52 MSPS did not reach successful cell search on
