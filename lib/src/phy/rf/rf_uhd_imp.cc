@@ -118,12 +118,15 @@ static const double RF_UHD_IMP_TRX_TIMEOUT_S = 0.5;
 /**
  * Receive asynchronous message receiver timeout
  */
-static const double RF_UHD_IMP_ASYNCH_MSG_TIMEOUT_S = 0.0;
+// ANTSDR's Ethernet flow-control receiver needs a short blocking poll.  A
+// zero-timeout call can return before the backend drains its ACK datagrams,
+// leaving the TX window stuck at roughly 1 MB.
+static const double RF_UHD_IMP_ASYNCH_MSG_TIMEOUT_S = 0.01;
 
 /**
  * Asynchronous message receiver sleep time
  */
-static const std::chrono::milliseconds RF_UHD_IMP_ASYNCH_MSG_SLEEP_MS = std::chrono::milliseconds(100);
+static const std::chrono::milliseconds RF_UHD_IMP_ASYNCH_MSG_SLEEP_MS = std::chrono::milliseconds(1);
 
 /**
  * Maximum of Rx Trials
@@ -279,16 +282,23 @@ static void* async_thread(void* h)
     std::unique_lock<std::mutex> lock(handler->async_mutex);
     bool                         valid = false;
 
-    // If the Tx stream is NULL wait for tx_cvar
+    // ANTSDR creates the TX streamer lazily and its Ethernet flow-control
+    // acknowledgements must keep being drained even if the streamer is
+    // replaced or one asynchronous read reports a transient UHD error.
+    // Poll instead of waiting on a notification: the ANTSDR backend can
+    // otherwise miss the wake-up during TX-stream creation and stop after
+    // its first ~1 MB flow-control window.
     if (not handler->uhd->is_tx_ready()) {
-      handler->async_cvar.wait(lock);
+      lock.unlock();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      continue;
     }
 
-    if (handler->uhd->is_tx_ready()) {
-      lock.unlock();
-      if (handler->uhd->recv_async_msg(md, RF_UHD_IMP_ASYNCH_MSG_TIMEOUT_S, valid) != UHD_ERROR_NONE) {
-        return nullptr;
-      }
+    lock.unlock();
+    if (handler->uhd->recv_async_msg(md, RF_UHD_IMP_ASYNCH_MSG_TIMEOUT_S, valid) != UHD_ERROR_NONE) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      continue;
+    }
 
       if (valid) {
         const uhd::async_metadata_t::event_code_t& event_code = md.event_code;
@@ -317,7 +327,6 @@ static void* async_thread(void* h)
       } else {
         std::this_thread::sleep_for(RF_UHD_IMP_ASYNCH_MSG_SLEEP_MS);
       }
-    }
   }
 
   return nullptr;
@@ -1518,7 +1527,9 @@ int rf_uhd_send_timed_multi(void*  h,
 
     // Skip baseband packet transmission if it is waiting for the enb of burst ACK
     if (handler->tx_state != RF_UHD_IMP_TX_STATE_WAIT_EOB_ACK) {
-      // Actual transmission
+      // Actual transmission. The dedicated asynchronous thread is the sole
+      // consumer of UHD TX metadata; reading the same queue here races with
+      // it and can turn a transient underflow into a late-timestamp storm.
       if (handler->uhd->send(buffs_ptr, tx_samples, md, RF_UHD_IMP_TRX_TIMEOUT_S, txd_samples) != UHD_ERROR_NONE) {
         return SRSRAN_ERROR;
       }
